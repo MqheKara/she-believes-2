@@ -49,9 +49,10 @@ def create_app(config_object=Config):
     from .routes.organizer import bp as organizer_bp
     from .routes.admin import bp as admin_bp
     from .routes.gate import bp as gate_bp
+    from .routes.internal import bp as internal_bp
 
     for bp in (public_bp, customer_auth_bp, orders_bp, tickets_bp, staff_auth_bp,
-               uploads_bp, organizer_bp, admin_bp, gate_bp):
+               uploads_bp, organizer_bp, admin_bp, gate_bp, internal_bp):
         app.register_blueprint(bp)
 
     # Serve uploaded posters
@@ -65,6 +66,24 @@ def create_app(config_object=Config):
 
     @app.errorhandler(500)
     def server_error(e):
+        # Log the underlying exception so logs actually show what blew up.
+        app.logger.exception("500 server error")
+        # Roll back the session so a poisoned transaction doesn't cascade
+        # into the next request handled by this worker.
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return jsonify({"error": "server_error"}), 500
+
+    @app.errorhandler(Exception)
+    def unhandled(e):
+        # Last-ditch handler for anything that escapes the route.
+        app.logger.exception("unhandled exception")
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
         return jsonify({"error": "server_error"}), 500
 
     with app.app_context():

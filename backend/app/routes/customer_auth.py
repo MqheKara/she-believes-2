@@ -12,7 +12,6 @@ bp = Blueprint("customer_auth", __name__, url_prefix="/api/auth")
 @bp.post("/signup")
 def signup():
     data = request.get_json(silent=True) or {}
-    print(data)
     name = (data.get("full_name") or "").strip()
     email = (data.get("email") or "").strip().lower()
     phone = (data.get("phone") or "").strip()

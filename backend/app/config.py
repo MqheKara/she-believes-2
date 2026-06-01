@@ -23,6 +23,18 @@ class Config:
     )
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
+    # Connection pool hygiene — CRITICAL for Render Postgres.
+    # Render closes idle DB connections after ~5 min; without pool_recycle,
+    # SQLAlchemy hands out dead sockets and you get "SSL error: decryption
+    # failed or bad record mac". pool_pre_ping does a cheap SELECT 1 before
+    # every checkout so stale connections are caught and replaced.
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        "pool_pre_ping": True,
+        "pool_recycle": 280,    # < Render's idle timeout
+        "pool_size": 5,
+        "max_overflow": 5,
+    }
+
     # JWT expiries (per SPEC §4)
     JWT_CUSTOMER_DAYS = 30
     JWT_STAFF_DAYS = 7  # organizer + admin
@@ -50,8 +62,17 @@ class Config:
     # Display
     DISPLAY_TZ = "Africa/Harare"
 
-    # Scheduler toggle (off during tests)
-    RUN_SCHEDULER = _bool(os.environ.get("RUN_SCHEDULER"), True)
+    # Background scheduler toggle.
+    # DEFAULT: OFF in production. APScheduler inside gunicorn workers causes
+    # SSL connection-pool corruption (every worker starts its own scheduler →
+    # multiple threads fight over Postgres connections). Instead, trigger
+    # /api/internal/jobs/run via Render Cron Jobs every minute. Set to "1"
+    # locally if you want the in-process scheduler during dev.
+    RUN_SCHEDULER = _bool(os.environ.get("RUN_SCHEDULER"), False)
+
+    # Shared secret for the internal jobs endpoint. Must match the
+    # Authorization: Bearer <token> header that the Render Cron job sends.
+    INTERNAL_JOBS_TOKEN = os.environ.get("INTERNAL_JOBS_TOKEN", "")
 
     # Public base URL for building invite/share links
     PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "http://localhost:5173")

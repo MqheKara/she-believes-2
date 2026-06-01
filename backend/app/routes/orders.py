@@ -16,7 +16,6 @@ bp = Blueprint("orders", __name__, url_prefix="/api")
 @require_auth("customer")
 def create_order():
     data = request.get_json(silent=True) or {}
-    print(data)
     event_id = data.get("event_id")
     items = data.get("items") or []
 
@@ -31,6 +30,15 @@ def create_order():
 
     # Count requested qty per ticket type
     wanted = Counter(it["ticket_type_id"] for it in items)
+
+    # Release any expired holds for this event FIRST, so a buyer is never
+    # blocked by a hold that has already lapsed. force=True bypasses the
+    # throttle because correctness matters more than cost on the buy path.
+    from ..jobs import sweep_expired_holds
+    try:
+        sweep_expired_holds(current_app._get_current_object())
+    except Exception:
+        current_app.logger.exception("pre-order sweep failed")
 
     try:
         # Lock the ticket-type rows for the duration of the transaction.
