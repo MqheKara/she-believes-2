@@ -18,7 +18,7 @@ export default function StaffLogin() {
     e.preventDefault()
     setBusy(true)
     try {
-      const { data } = await api.post('/auth/login', form)
+      const { data } = await api.post('/auth/staff/login', form)
       const role = data.user?.role
       if (role !== 'admin' && role !== 'organizer') {
         toast.error('Use the customer sign-in for that account.')
