@@ -11,7 +11,11 @@ bp = Blueprint("staff_auth", __name__, url_prefix="/api/auth")
 def staff_login():
     data = request.get_json(silent=True) or {}
     email = (data.get("email") or "").strip().lower()
+    print("Email")
+    print(email)
     password = data.get("password") or ""
+    print("Password")
+    print(password)
     user = User.query.filter(
         User.email == email, User.role.in_(("admin", "organizer"))
     ).first()
