@@ -21,7 +21,7 @@ export default function GateLogin() {
       const { data } = await api.post('/auth/staff/login', { phone, pin })
       const user = { ...data.user, role: 'gate_staff' }
       login({ token: data.token, user })
-      toast.success(`Signed in. Steady hands, ${data.user?.full_name?.split(' ')[0] || 'sister'}.`)
+      toast.success(`Signed in. Steady hands, ${data.user?.name?.split(' ')[0] || 'sister'}.`)
       nav('/gate/scan', { replace: true })
     } catch (err) {
       toast.error(apiError(err, 'Invalid phone or PIN.'))

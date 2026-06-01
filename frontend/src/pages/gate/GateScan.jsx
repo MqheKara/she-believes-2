@@ -73,13 +73,22 @@ export default function GateScan() {
         device_id: getDeviceId(),
         scanned_at: new Date().toISOString(),
       })
-      const r = data.result || 'valid'
-      setResult({ result: r, ticket: data.ticket, message: data.message })
-      setRecent((prev) => [{ id: now, result: r, name: data.ticket?.attendee_name || '—' }, ...prev].slice(0, 12))
+      // Backend returns a FLAT response: { status, message, attendee_name, ticket_type }.
+      // Normalize it into the { result, ticket, message } shape this component renders.
+      const r = data.status || 'valid'
+      const ticket = data.attendee_name
+        ? { attendee_name: data.attendee_name, ticket_type_name: data.ticket_type }
+        : null
+      setResult({ result: r, ticket, message: data.message })
+      setRecent((prev) => [{ id: now, result: r, name: data.attendee_name || '—' }, ...prev].slice(0, 12))
     } catch (err) {
-      const r = err?.response?.data?.result || 'invalid'
-      setResult({ result: r, message: apiError(err, 'Invalid QR.') })
-      setRecent((prev) => [{ id: now, result: r, name: '—' }, ...prev].slice(0, 12))
+      const d = err?.response?.data || {}
+      const r = d.status || 'invalid'
+      const ticket = d.attendee_name
+        ? { attendee_name: d.attendee_name, ticket_type_name: d.ticket_type }
+        : null
+      setResult({ result: r, ticket, message: d.message || apiError(err, 'Invalid QR.') })
+      setRecent((prev) => [{ id: now, result: r, name: d.attendee_name || '—' }, ...prev].slice(0, 12))
     }
   }
 
@@ -99,7 +108,7 @@ export default function GateScan() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', maxWidth: 480, margin: '0 auto 12px', width: '100%' }}>
         <div>
           <div style={{ fontFamily: 'var(--font-headline)', fontSize: 11, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'var(--sb-pink)' }}>Gate · {user?.event_title || 'station'}</div>
-          <div style={{ fontWeight: 700 }}>{user?.full_name}</div>
+          <div style={{ fontWeight: 700 }}>{user?.name}</div>
         </div>
         <button className="btn-ghost btn-sm" style={{ color: '#fff' }} onClick={doLogout}><LogOut size={14} /> End shift</button>
       </div>

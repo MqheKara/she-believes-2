@@ -67,7 +67,8 @@ export default function OrganizerNewEvent() {
       }
       const { data } = await api.post('/organizer/events', payload)
       toast.success('Submitted for approval.')
-      nav(`/org/events/${data.event.id}`)
+      // Backend returns the event dict flat (id at top level), not { event: {...} }.
+      nav(`/org/events/${data.id}`)
     } catch (err) {
       toast.error(apiError(err))
     } finally {

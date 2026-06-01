@@ -75,7 +75,8 @@ export default function Checkout() {
     setBusy(true)
     try {
       const { data } = await api.post('/orders', { event_id: event.id, items })
-      nav(`/orders/${data.order.id}/submitted`, { replace: true })
+      // Backend returns the order dict flat (id at top level), NOT { order: {...} }.
+      nav(`/orders/${data.id}/submitted`, { replace: true })
     } catch (err) {
       if (err?.response?.data?.error === 'sold_out') {
         toast.error('Some seats just sold out, sister. Please adjust your order.')
