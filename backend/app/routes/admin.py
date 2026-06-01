@@ -275,6 +275,7 @@ def approve_order(order_id):
     order.paid_at = utcnow()
     order.hold_expires_at = None
     order.payment_ref = f"ECOCASH-MANUAL:{ecocash_ref}" if ecocash_ref else "ECOCASH-MANUAL"
+    order.clear_intent()
 
     ev = order.event
     name, phone, email = order.buyer_info()
@@ -304,6 +305,7 @@ def reject_order(order_id):
 
     order.status = "failed"
     order.hold_expires_at = None
+    order.clear_intent()
     ev = order.event
     notify(order.customer_id, "ticket_delivered", f"Order for {ev.title} declined",
            reason or "Your order could not be confirmed. Reach out and we'll help.")
@@ -540,12 +542,7 @@ def mock_messages():
 # helpers
 # ---------------------------------------------------------------------------
 def _intent_items(order):
-    if not (order.payment_ref or "").startswith("INTENT:"):
-        return []
-    try:
-        return json.loads(order.payment_ref.split(":", 1)[1])
-    except (ValueError, IndexError):
-        return []
+    return order.get_intent()
 
 
 def _notify_ticket_holders(event, kind, title, body, also_email=False, include_voided=False):

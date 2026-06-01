@@ -79,8 +79,10 @@ def create_order():
             total_usd=total,
             status="pending",
             hold_expires_at=utcnow() + timedelta(minutes=hold_minutes),
-            payment_ref="INTENT:" + json.dumps(items),
         )
+        # Cart payload goes in its own text column (was overloading payment_ref,
+        # which truncates at varchar length for multi-ticket orders).
+        order.set_intent(items)
         db.session.add(order)
 
         # Place holds
@@ -110,6 +112,7 @@ def cancel_order(order_id):
     _release_holds(order)
     order.status = "failed"
     order.hold_expires_at = None
+    order.clear_intent()
     audit(g.current_user.id, "cancel_order", "orders", order.id)
     db.session.commit()
     return jsonify({"ok": True})
@@ -149,33 +152,24 @@ def _release_holds(order):
 
 
 def _intent_counts(order):
-    if not (order.payment_ref or "").startswith("INTENT:"):
-        return {}
-    try:
-        items = json.loads(order.payment_ref.split(":", 1)[1])
-    except (ValueError, IndexError):
-        return {}
-    return Counter(it["ticket_type_id"] for it in items)
+    return Counter(it["ticket_type_id"] for it in order.get_intent())
 
 
 def _order_dict(order):
     # First ticket id (for the submitted-page auto-redirect once minted)
     first_ticket = Ticket.query.filter_by(order_id=order.id).first()
     items = []
-    if (order.payment_ref or "").startswith("INTENT:"):
-        try:
-            raw = json.loads(order.payment_ref.split(":", 1)[1])
-            # Group by type with names
-            for it in raw:
-                tt = TicketType.query.get(it["ticket_type_id"])
-                items.append({
-                    "ticket_type_id": it["ticket_type_id"],
-                    "ticket_type_name": tt.name if tt else "?",
-                    "price_usd": float(tt.price_usd) if tt else 0,
-                    "attendee_name": it.get("attendee_name"),
-                })
-        except (ValueError, IndexError):
-            pass
+    intent = order.get_intent()
+    if intent:
+        # Group by type with names
+        for it in intent:
+            tt = TicketType.query.get(it["ticket_type_id"])
+            items.append({
+                "ticket_type_id": it["ticket_type_id"],
+                "ticket_type_name": tt.name if tt else "?",
+                "price_usd": float(tt.price_usd) if tt else 0,
+                "attendee_name": it.get("attendee_name"),
+            })
     else:
         for t in order.tickets:
             items.append({

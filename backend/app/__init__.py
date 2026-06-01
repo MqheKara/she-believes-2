@@ -88,6 +88,7 @@ def create_app(config_object=Config):
 
     with app.app_context():
         db.create_all()
+        _ensure_schema(app)
         bootstrap_admin(app)
 
     if app.config.get("RUN_SCHEDULER"):
@@ -95,6 +96,26 @@ def create_app(config_object=Config):
         start_scheduler(app)
 
     return app
+
+
+def _ensure_schema(app):
+    """Tiny idempotent migration for columns added after first deploy.
+    db.create_all() creates missing TABLES but never adds missing COLUMNS to
+    existing tables, so a plain redeploy won't add `orders.intent_json`. We add
+    it by hand if absent. Safe to run on every boot; works on Postgres + SQLite.
+    """
+    from sqlalchemy import inspect, text
+
+    try:
+        insp = inspect(db.engine)
+        cols = {c["name"] for c in insp.get_columns("orders")}
+        if "intent_json" not in cols:
+            app.logger.info("migrating: adding orders.intent_json column")
+            with db.engine.begin() as conn:
+                conn.execute(text("ALTER TABLE orders ADD COLUMN intent_json TEXT"))
+    except Exception:
+        # Never let a migration check crash startup; log and continue.
+        app.logger.exception("schema ensure failed")
 
 
 def bootstrap_admin(app):

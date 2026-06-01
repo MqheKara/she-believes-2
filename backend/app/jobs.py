@@ -12,7 +12,6 @@ failed or bad record mac").
 
 For local dev, set RUN_SCHEDULER=1 and the in-process scheduler kicks in.
 """
-import json
 from collections import Counter
 from datetime import timedelta
 
@@ -27,17 +26,15 @@ def sweep_expired_holds(app):
             Order.query.filter(Order.status == "pending", Order.hold_expires_at < now).all()
         )
         for order in expired:
-            if (order.payment_ref or "").startswith("INTENT:"):
-                try:
-                    items = json.loads(order.payment_ref.split(":", 1)[1])
-                    for ttid, qty in Counter(it["ticket_type_id"] for it in items).items():
-                        tt = TicketType.query.get(ttid)
-                        if tt:
-                            tt.quantity_held = max(0, tt.quantity_held - qty)
-                except (ValueError, IndexError):
-                    pass
+            for ttid, qty in Counter(
+                it["ticket_type_id"] for it in order.get_intent()
+            ).items():
+                tt = TicketType.query.get(ttid)
+                if tt:
+                    tt.quantity_held = max(0, tt.quantity_held - qty)
             order.status = "expired"
             order.hold_expires_at = None
+            order.clear_intent()
         if expired:
             db.session.commit()
         return len(expired)

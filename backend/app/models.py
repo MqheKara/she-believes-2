@@ -185,7 +185,11 @@ class Order(db.Model):
     total_usd = db.Column(db.Numeric(10, 2), nullable=False, default=0)
     status = db.Column(db.String(20), nullable=False, default="pending")
     hold_expires_at = db.Column(db.DateTime, nullable=True)
-    payment_ref = db.Column(db.String(120), nullable=True)
+    payment_ref = db.Column(db.String(255), nullable=True)
+    # Cart payload for a pending order (list of {ticket_type_id, attendee_name}).
+    # Stored as JSON Text — NOT in payment_ref, which is a short code field and
+    # truncates at varchar length once an order has more than ~1 ticket.
+    intent_json = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=utcnow)
     paid_at = db.Column(db.DateTime, nullable=True)
     walk_in_name = db.Column(db.String(120), nullable=True)
@@ -204,6 +208,33 @@ class Order(db.Model):
         if c:
             return (c.name, c.phone, c.email)
         return (None, None, None)
+
+    # --- checkout intent (the cart contents of a pending order) -------------
+    def set_intent(self, items):
+        """Store the cart payload as JSON in the dedicated text column."""
+        import json as _json
+        self.intent_json = _json.dumps(items)
+
+    def get_intent(self):
+        """Return the cart payload as a list. Reads the new intent_json column,
+        falling back to the legacy 'INTENT:<json>' payment_ref format so orders
+        created before this migration still work."""
+        import json as _json
+        if self.intent_json:
+            try:
+                return _json.loads(self.intent_json)
+            except (ValueError, TypeError):
+                return []
+        ref = self.payment_ref or ""
+        if ref.startswith("INTENT:"):
+            try:
+                return _json.loads(ref.split(":", 1)[1])
+            except (ValueError, IndexError):
+                return []
+        return []
+
+    def clear_intent(self):
+        self.intent_json = None
 
 
 # ---------------------------------------------------------------------------
