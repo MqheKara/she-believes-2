@@ -58,6 +58,9 @@ class Config:
     BOOTSTRAP_ADMIN_EMAIL = os.environ.get("BOOTSTRAP_ADMIN_EMAIL", "admin@shebelieves.test")
     BOOTSTRAP_ADMIN_PASSWORD = os.environ.get("BOOTSTRAP_ADMIN_PASSWORD", "Admin!Pass123")
     BOOTSTRAP_ADMIN_PHONE = os.environ.get("BOOTSTRAP_ADMIN_PHONE", "+263770000000")
+    # Set to 1 to force the existing admin's email+password to match the env
+    # vars on next boot (lockout recovery). Unset it again afterward.
+    BOOTSTRAP_ADMIN_RESET = _bool(os.environ.get("BOOTSTRAP_ADMIN_RESET"), False)
 
     # Display
     DISPLAY_TZ = "Africa/Harare"

@@ -95,6 +95,9 @@ def create_app(config_object=Config):
         from .jobs import start_scheduler
         start_scheduler(app)
 
+    from .cli import register_cli
+    register_cli(app)
+
     return app
 
 
@@ -119,26 +122,59 @@ def _ensure_schema(app):
 
 
 def bootstrap_admin(app):
-    """Create the first admin from env vars if none exists (SPEC §20)."""
-    from .models import User
+    """Ensure an admin account exists.
 
-    if User.query.filter_by(role="admin").first():
-        return
-    email = app.config["BOOTSTRAP_ADMIN_EMAIL"]
+    Normal behavior: if no admin exists, create one from the BOOTSTRAP_ADMIN_*
+    env vars. If an admin already exists, do nothing (so we don't clobber a
+    real password on every deploy).
+
+    Escape hatch: set BOOTSTRAP_ADMIN_RESET=1 to force the bootstrap admin's
+    email/password to match the current env vars even if an admin already
+    exists. Use this once to recover from a lockout, then UNSET it and redeploy
+    so you're not resetting the password on every boot.
+    """
+    from .hashing import hash_secret
+    from .models import User
+    from .extensions import db as _db
+
+    email = (app.config["BOOTSTRAP_ADMIN_EMAIL"] or "").lower()
     password = app.config["BOOTSTRAP_ADMIN_PASSWORD"]
     phone = app.config["BOOTSTRAP_ADMIN_PHONE"]
+    reset = app.config.get("BOOTSTRAP_ADMIN_RESET")
+
+    existing_admin = User.query.filter_by(role="admin").first()
+
+    if existing_admin and not reset:
+        return
+
+    if existing_admin and reset:
+        # Recover access: align the admin row with the env-var credentials.
+        existing_admin.email = email
+        existing_admin.password_hash = hash_secret(password)
+        _db.session.commit()
+        app.logger.warning(
+            "BOOTSTRAP_ADMIN_RESET active: reset admin email+password from env. "
+            "UNSET BOOTSTRAP_ADMIN_RESET and redeploy."
+        )
+        return
+
+    # No admin yet → create one. If the target email is taken by a non-admin,
+    # promote that account instead of crashing on the unique constraint.
+    clash = User.query.filter_by(email=email).first()
+    if clash:
+        clash.role = "admin"
+        clash.password_hash = hash_secret(password)
+        _db.session.commit()
+        app.logger.warning("bootstrap: promoted existing user %s to admin", email)
+        return
+
     admin = User(
         role="admin",
         name="Administrator",
-        email=email.lower(),
+        email=email,
         phone=phone,
         password_hash=hash_secret(password),
     )
-    db.session.add(admin)
-    db.session.commit()
-    print("=" * 60)
-    print("  Bootstrapped admin account (DEMO MODE):")
-    print(f"    email:    {email}")
-    print(f"    password: {password}")
-    print("  Change these via env vars in production.")
-    print("=" * 60)
+    _db.session.add(admin)
+    _db.session.commit()
+    app.logger.info("bootstrapped admin account: %s", email)
