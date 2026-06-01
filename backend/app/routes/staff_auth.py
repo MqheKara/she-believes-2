@@ -20,5 +20,5 @@ def staff_login():
         User.email == email, User.role.in_(("admin", "organizer"))
     ).first()
     if not user or not verify_secret(password, user.password_hash):
-        return jsonify({"error": "bad_credentials"}), 401
+        return jsonify({"error": email}), 401
     return jsonify({"token": token_for_staff(user), "user": user.public_dict()})
